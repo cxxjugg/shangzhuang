@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>上妆登记</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 0; min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #eef3ff 0%, #f7f9ff 100%);
+    color: #1c1f33;
+  }
+  .wrap { max-width: 420px; margin: 0 auto; padding: 28px 20px 40px; }
+  .card {
+    background: #fff; border-radius: 16px; padding: 24px;
+    box-shadow: 0 6px 24px rgba(30, 60, 120, 0.08);
+  }
+  h1 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+  .sub { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; color: #374151; margin-bottom: 6px; font-weight: 500; }
+  .field input, .field select {
+    width: 100%; height: 42px; border: 1px solid #d1d5db; border-radius: 10px;
+    padding: 0 12px; font-size: 15px; background: #fff;
+    transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+  .btn {
+    width: 100%; height: 46px; border-radius: 10px; border: 0; cursor: pointer;
+    font-size: 15px; font-weight: 600; margin-top: 8px;
+    transition: transform .1s, box-shadow .2s;
+  }
+  .btn-primary { background: #3b82f6; color: #fff; box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:disabled { background: #c5cdd8; box-shadow: none; color: #fff; }
+  .btn-outline {
+    background: #fff; color: #3b82f6; border: 1px solid #3b82f6;
+    margin-top: 8px; height: 38px; font-size: 13px; font-weight: 500;
+  }
+  .btn-outline:active { background: #f0f7ff; }
+  .profile { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f0f7ff; border-radius: 10px; margin-bottom: 16px; }
+  .profile .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600;
+  }
+  .profile .info { flex: 1; }
+  .profile .info .name { font-size: 15px; font-weight: 600; }
+  .profile .info .id { font-size: 12px; color: #6b7280; }
+  .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin: 0; line-height: 1.5; }
+  .status.info { background: #eff6ff; color: #1e40af; }
+  .status.success { background: #ecfdf5; color: #065f46; }
+  .status.warn { background: #fef3c7; color: #92400e; }
+  .status.error { background: #fef2f2; color: #991b1b; }
+  .hidden { display: none !important; }
+  .tip { font-size: 12px; color: #9ca3af; text-align: center; margin-top: 20px; line-height: 1.6; }
+  a.link { color: #3b82f6; text-decoration: none; font-size: 12px; }
+
+  /* ===== 定位结果醒目展示 ===== */
+  .loc-card {
+    border: 2px solid #d1d5db; border-radius: 12px; padding: 16px;
+    margin-bottom: 14px; background: #fafafa;
+    transition: border-color .3s, background .3s;
+  }
+  .loc-card.located {
+    border-color: #22c55e; background: #f0fdf4;
+  }
+  .loc-card.locating {
+    border-color: #3b82f6; background: #eff6ff;
+  }
+  .loc-card.failed {
+    border-color: #ef4444; background: #fef2f2;
+  }
+  .loc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .loc-header .icon { font-size: 22px; }
+  .loc-header .label { font-size: 13px; font-weight: 600; color: #374151; }
+  .loc-header .accuracy { font-size: 12px; color: #6b7280; margin-left: auto; }
+  .loc-address {
+    font-size: 17px; font-weight: 600; color: #111827; line-height: 1.5;
+    word-break: break-all;
+  }
+  .loc-coords {
+    font-size: 12px; color: #9ca3af; margin-top: 6px;
+    font-family: "SF Mono", "Menlo", monospace;
+  }
+  .loc-hint {
+    font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.5;
+    padding-top: 8px; border-top: 1px dashed #e5e7eb;
+  }
+  .loc-loading {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 500; color: #1e40af; padding: 8px 0;
+  }
+  .spinner-lg {
+    display: inline-block; width: 22px; height: 22px;
+    border: 3px solid #bfdbfe; border-top-color: #2563eb;
+    border-radius: 50%; animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .map-preview {
+    width: 100%; height: 140px; border-radius: 8px; margin-top: 10px;
+    border: 1px solid #e5e7eb; overflow: hidden; background: #e5e7eb;
+  }
+  .map-preview img { width: 100%; height: 100%; object-fit: cover; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>上妆登记</h1>
+    <div class="sub" id="subText">自动定位</div>
+
+    <!-- 绑定页 -->
+    <div id="bindView">
+      <div class="field">
+        <label>艺名</label>
+        <input id="bindName" placeholder="你的艺名" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>真实姓名</label>
+        <input id="bindRealName" placeholder="你的真实姓名" autocomplete="off" />
+      </div>
+      <button class="btn btn-primary" id="btnBind">确认绑定</button>
+      <div class="tip">首次使用需要绑定一次，之后本机会记住你</div>
+    </div>
+
+    <!-- 登记页 -->
+    <div id="checkinView" class="hidden">
+      <div class="profile">
+        <div class="avatar" id="avatarText">艺</div>
+        <div class="info">
+          <div class="name" id="displayName">-</div>
+          <div class="id" id="displayReal">-</div>
+        </div>
+        <a class="link" id="rebindLink" href="#">换人</a>
+      </div>
+      <div class="field">
+        <label>团名</label>
+        <select id="team">
+          <option value="">请选择</option>
+          <option>K1-星光屿</option><option>K2-江畔月</option>
+          <option>K3-兴隆湖</option><option>K5-水云涧</option>
+          <option>K6-伊芙琳</option><option>K7-美杜莎</option>
+          <option>K9-浣花溪</option><option>K10-沪上小姨</option>
+        </select>
+      </div>
+
+      <!-- 醒目的定位结果卡片 -->
+      <div id="locCard" class="loc-card locating">
+        <div id="locLoading">
+          <div class="loc-loading">
+            <span class="spinner-lg"></span>
+            正在获取你的位置…
+          </div>
+          <div style="font-size:12px;color:#6b7280;margin-top:6px;">请确保已开启 GPS 并允许浏览器获取位置</div>
+        </div>
+        <div id="locResult" class="hidden">
+          <div class="loc-header">
+            <span class="icon">📍</span>
+            <span class="label">位置定位</span>
+            <span class="accuracy" id="locAccuracy"></span>
+          </div>
+          <div class="loc-address" id="locAddress">-</div>
+          <div class="loc-coords" id="locCoords"></div>
+          <div id="mapBox" class="map-preview hidden">
+            <img id="mapImg" src="" alt="定位地图" />
+          </div>
+          <div class="loc-hint" id="locHint">✅ 请确认以上位置是你当前的实际位置，确认无误后再提交</div>
+        </div>
+        <div id="locFailed" class="hidden">
+          <div class="loc-header">
+            <span class="icon">❌</span>
+            <span class="label">定位失败</span>
+          </div>
+          <div class="loc-address" id="locFailMsg" style="font-size:14px;color:#991b1b;">-</div>
+          <div class="loc-hint">请确保已开启 GPS 并允许浏览器获取位置，然后点击下方重试</div>
+          <button class="btn btn-outline" id="btnRelocate">🔄 重新定位</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btnSubmit" disabled>请先等待定位完成</button>
+      <div class="tip" id="todayTip"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== 配置 =====
+  var FORM_URL = "https://bcn7252fg3ao.feishu.cn/share/base/form/shrcnaROYRMtrp8mE34821Zfe9c";
+  var LS_KEY = "zb_checkin_identity_v1";
+
+  var bindView = document.getElementById("bindView");
+  var checkinView = document.getElementById("checkinView");
+  var locCard = document.getElementById("locCard");
+  var locLoading = document.getElementById("locLoading");
+  var locResult = document.getElementById("locResult");
+  var locFailed = document.getElementById("locFailed");
+  var locAddress = document.getElementById("locAddress");
+  var locCoords = document.getElementById("locCoords");
+  var locAccuracy = document.getElementById("locAccuracy");
+  var locFailMsg = document.getElementById("locFailMsg");
+  var locHint = document.getElementById("locHint");
+  var mapBox = document.getElementById("mapBox");
+  var mapImg = document.getElementById("mapImg");
+  var todayTip = document.getElementById("todayTip");
+  var btnSubmit = document.getElementById("btnSubmit");
+
+  var locCache = null; // { lat, lng, accuracy, address }
+  var locReady = false;
+
+  // ===== 身份管理 =====
+  function loadIdentity() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (!obj.nickname || !obj.realName) return null;
+      return obj;
+    } catch (e) { return null; }
+  }
+
+  function saveIdentity(nick, real) {
+    localStorage.setItem(LS_KEY, JSON.stringify({ nickname: nick, realName: real, boundAt: Date.now() }));
+  }
+
+  function showBind() {
+    bindView.classList.remove("hidden");
+    checkinView.classList.add("hidden");
+  }
+
+  function showCheckin(identity) {
+    bindView.classList.add("hidden");
+    checkinView.classList.remove("hidden");
+    document.getElementById("displayName").textContent = identity.nickname;
+    document.getElementById("displayReal").textContent = identity.realName;
+    document.getElementById("avatarText").textContent = identity.nickname.charAt(0);
+    var d = new Date();
+    todayTip.textContent = "今天：" + d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+    requestLocation();
+  }
+
+  // ===== 提交按钮状态 =====
+  function updateSubmitBtn() {
+    if (locReady && document.getElementById("team").value) {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = "✅ 提交";
+    } else if (!locReady) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = "请先等待定位完成";
+    } else {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = "请选择团名";
+    }
+  }
+
+  // ===== GPS 定位 + 反向地理编码 =====
+  function requestLocation() {
+    locReady = false;
+    updateSubmitBtn();
+    locCard.className = "loc-card locating";
+    locLoading.classList.remove("hidden");
+    locResult.classList.add("hidden");
+    locFailed.classList.add("hidden");
+
+    if (!navigator.geolocation) {
+      showLocFailed("当前浏览器不支持 GPS 定位，请换用手机浏览器");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        var acc = Math.round(pos.coords.accuracy || 0);
+        locCache = { lat: lat.toFixed(6), lng: lng.toFixed(6), accuracy: acc, address: "" };
+
+        // 先显示经纬度
+        locLoading.classList.add("hidden");
+        locResult.classList.remove("hidden");
+        locCard.className = "loc-card located";
+        locAddress.textContent = "正在解析地址…";
+        locCoords.textContent = "纬度 " + locCache.lat + " / 经度 " + locCache.lng;
+        locAccuracy.textContent = "精度约 " + acc + " 米";
+
+        // 尝试显示静态地图
+        showStaticMap(lat, lng);
+
+        // 反向地理编码
+        reverseGeocode(locCache.lat, locCache.lng);
+      },
+      function(err) {
+        var msg = "定位失败";
+        if (err.code === 1) msg = "你拒绝了位置权限，请到浏览器设置中允许获取位置";
+        else if (err.code === 2) msg = "GPS 信号不可用，请到室外开阔地带重试";
+        else if (err.code === 3) msg = "定位超时，请检查网络后重试";
+        else msg = "定位失败：" + err.message;
+        showLocFailed(msg);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  function showLocFailed(msg) {
+    locReady = false;
+    updateSubmitBtn();
+    locCard.className = "loc-card failed";
+    locLoading.classList.add("hidden");
+    locResult.classList.add("hidden");
+    locFailed.classList.remove("hidden");
+    locFailMsg.textContent = msg;
+  }
+
+  function showStaticMap(lat, lng) {
+    // 使用 OpenStreetMap 静态地图（无需 key）
+    var mapUrl = "https://staticmap.openstreetmap.de/staticmap.php?center=" + lat + "," + lng + "&zoom=16&size=400x140&markers=" + lat + "," + lng + ",red-pushpin";
+    mapImg.src = mapUrl;
+    mapBox.classList.remove("hidden");
+    mapImg.onerror = function() { mapBox.classList.add("hidden"); };
+  }
+
+  function reverseGeocode(lat, lng) {
+    var url = "https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&accept-language=zh&zoom=18&addressdetails=1";
+    fetch(url, { headers: { "Accept": "application/json" } })
+      .then(function(resp) { return resp.json(); })
+      .then(function(data) {
+        if (data && data.display_name) {
+          locCache.address = data.display_name;
+          locAddress.textContent = data.display_name;
+        } else {
+          locAddress.textContent = "无法解析地址，将记录坐标";
+          locHint.textContent = "⚠️ 地址解析失败，将记录经纬度坐标";
+        }
+        locReady = true;
+        updateSubmitBtn();
+      })
+      .catch(function() {
+        locAddress.textContent = "地址解析超时，将记录坐标";
+        locHint.textContent = "⚠️ 地址解析超时，将记录经纬度坐标";
+        locReady = true;
+        updateSubmitBtn();
+      });
+  }
+
+  // ===== 事件绑定 =====
+
+  document.getElementById("btnBind").addEventListener("click", function() {
+    var nick = document.getElementById("bindName").value.trim();
+    var real = document.getElementById("bindRealName").value.trim();
+    if (!nick || !real) { alert("艺名和姓名都要填"); return; }
+    saveIdentity(nick, real);
+    showCheckin({ nickname: nick, realName: real });
+  });
+
+  document.getElementById("rebindLink").addEventListener("click", function(e) {
+    e.preventDefault();
+    if (confirm("要重新绑定身份吗？（换人/换手机时）")) {
+      localStorage.removeItem(LS_KEY);
+      showBind();
+    }
+  });
+
+  document.getElementById("team").addEventListener("change", updateSubmitBtn);
+
+  document.getElementById("btnRelocate").addEventListener("click", function() {
+    requestLocation();
+  });
+
+  btnSubmit.addEventListener("click", function() {
+    var identity = loadIdentity();
+    if (!identity) { showBind(); return; }
+
+    var team = document.getElementById("team").value;
+    if (!team) { alert("请选择团名"); return; }
+
+    if (!locReady || !locCache) {
+      alert("定位还没完成，请稍等或点击「重新定位」");
+      return;
+    }
+
+    doSubmit(identity, team);
+  });
+
+  function doSubmit(identity, team) {
+    if (!FORM_URL || FORM_URL.indexOf("PLACEHOLDER") > -1) {
+      alert("系统还没配置好，请联系管理员");
+      return;
+    }
+
+    var locText = "";
+    if (locCache.address) {
+      locText = locCache.address + " (" + locCache.lat + "," + locCache.lng + ")";
+    } else {
+      locText = locCache.lat + "," + locCache.lng;
+    }
+
+    var sep = FORM_URL.indexOf("?") > -1 ? "&" : "?";
+    var prefill = sep +
+      "prefill_艺名=" + encodeURIComponent(identity.nickname) +
+      "&prefill_姓名=" + encodeURIComponent(identity.realName) +
+      "&prefill_所属团=" + encodeURIComponent(team) +
+      "&prefill_签到位置=" + encodeURIComponent(locText);
+
+    prefill += "&hide_艺名=1&hide_姓名=1&hide_签到位置=1";
+
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = "正在跳转…";
+    window.location.href = FORM_URL + prefill;
+    // 3秒后恢复按钮（如果跳转失败用户可重试）
+    setTimeout(function() {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = "✅ 提交";
+    }, 3000);
+  }
+
+  // ===== 初始化 =====
+  var identity = loadIdentity();
+  if (identity) showCheckin(identity); else showBind();
+</script>
+</body>
+</html>
