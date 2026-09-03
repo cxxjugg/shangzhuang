@@ -329,16 +329,37 @@
     locFailMsg.textContent = msg;
   }
 
+
+
+  // JSONP 调用（绕过浏览器跨域限制，腾讯地图接口支持 output=jsonp）
+  function jsonpFetch(url) {
+    return new Promise(function(resolve, reject) {
+      var cbName = "qqmap_cb_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+      var script = document.createElement("script");
+      var done = false;
+      var timer = setTimeout(function() { cleanup(); reject(new Error("timeout")); }, 8000);
+      function cleanup() {
+        clearTimeout(timer);
+        try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+      window[cbName] = function(data) {
+        if (done) return; done = true; cleanup(); resolve(data);
+      };
+      script.onerror = function() {
+        if (done) return; done = true; cleanup(); reject(new Error("network error"));
+      };
+      script.src = url + "&output=jsonp&callback=" + cbName;
+      document.body.appendChild(script);
+    });
+  }
+
   function reverseGeocode(lat, lng) {
-    // 腾讯地图逆地址解析（国内访问快、返回中文地名）
+    // 腾讯地图逆地址解析（国内访问快、返回中文地名；JSONP 方式避免跨域拦截）
     var url = "https://apis.map.qq.com/ws/geocoder/v1/?location=" + lat + "," + lng +
               "&key=" + QQ_MAP_KEY + "&get_poi=1&poi_options=radius=200;policy=2";
-    var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
-    fetch(url, { signal: ctrl.signal, cache: "no-store" })
-      .then(function(resp) { return resp.json(); })
+    jsonpFetch(url)
       .then(function(data) {
-        clearTimeout(timer);
         if (data && data.status === 0 && data.result) {
           var r = data.result;
           // 页面显示：推荐地址（如"四川省成都市武侯区桂溪街道XX大厦附近"），更直观
@@ -353,8 +374,7 @@
         }
       })
       .catch(function() {
-        clearTimeout(timer);
-        // 地址服务超时：静默降级，坐标已足够记录位置
+        // 地址服务超时/失败：静默降级，坐标已足够记录位置
         if (locCache && !locCache.address) {
           locAddress.textContent = "位置已记录（经纬度 " + locCache.lat + "," + locCache.lng + "）";
         }
