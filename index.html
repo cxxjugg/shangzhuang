@@ -183,6 +183,7 @@
   // ===== 配置 =====
   var FORM_URL = "https://bcn7252fg3ao.feishu.cn/share/base/form/shrcnaROYRMtrp8mE34821Zfe9c";
   var LS_KEY = "zb_checkin_identity_v1";
+  var QQ_MAP_KEY = "UVRBZ-OANKN-VMJFP-SB3DO-4TBVJ-5IFJP";
 
   var bindView = document.getElementById("bindView");
   var checkinView = document.getElementById("checkinView");
@@ -329,16 +330,23 @@
   }
 
   function reverseGeocode(lat, lng) {
-    var url = "https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&accept-language=zh&zoom=18";
+    // 腾讯地图逆地址解析（国内访问快、返回中文地名）
+    var url = "https://apis.map.qq.com/ws/geocoder/v1/?location=" + lat + "," + lng +
+              "&key=" + QQ_MAP_KEY + "&get_poi=1&poi_options=radius=200;policy=2";
     var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, 6000);
-    fetch(url, { headers: { "Accept": "application/json" }, signal: ctrl.signal, cache: "no-store" })
+    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
+    fetch(url, { signal: ctrl.signal, cache: "no-store" })
       .then(function(resp) { return resp.json(); })
       .then(function(data) {
         clearTimeout(timer);
-        if (data && data.display_name) {
-          locCache.address = data.display_name;
-          locAddress.textContent = data.display_name;
+        if (data && data.status === 0 && data.result) {
+          var r = data.result;
+          // 页面显示：推荐地址（如"四川省成都市武侯区桂溪街道XX大厦附近"），更直观
+          var showAddr = (r.formatted_addresses && r.formatted_addresses.recommend)
+            ? r.formatted_addresses.recommend : r.address;
+          // 记录用：标准行政区地址（如"四川省成都市武侯区锦尚西二路"）
+          locCache.address = r.address || showAddr;
+          locAddress.textContent = showAddr;
           locHint.textContent = "✅ 请确认以上位置是你当前的实际位置，确认无误后再提交";
         } else {
           locAddress.textContent = "位置已记录（经纬度 " + locCache.lat + "," + locCache.lng + "）";
@@ -346,7 +354,7 @@
       })
       .catch(function() {
         clearTimeout(timer);
-        // 地址服务慢/不通：静默降级，坐标已足够记录位置
+        // 地址服务超时：静默降级，坐标已足够记录位置
         if (locCache && !locCache.address) {
           locAddress.textContent = "位置已记录（经纬度 " + locCache.lat + "," + locCache.lng + "）";
         }
