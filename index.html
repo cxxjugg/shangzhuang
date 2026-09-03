@@ -100,12 +100,6 @@
     border-radius: 50%; animation: spin .7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  .map-preview {
-    width: 100%; height: 140px; border-radius: 8px; margin-top: 10px;
-    border: 1px solid #e5e7eb; overflow: hidden; background: #e5e7eb;
-  }
-  .map-preview img { width: 100%; height: 100%; object-fit: cover; }
 </style>
 </head>
 <body>
@@ -156,7 +150,7 @@
             <span class="spinner-lg"></span>
             正在获取你的位置…
           </div>
-          <div style="font-size:12px;color:#6b7280;margin-top:6px;">请确保已开启 GPS 并允许浏览器获取位置</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:6px;">通常几秒内完成，请允许浏览器获取位置</div>
         </div>
         <div id="locResult" class="hidden">
           <div class="loc-header">
@@ -166,10 +160,7 @@
           </div>
           <div class="loc-address" id="locAddress">-</div>
           <div class="loc-coords" id="locCoords"></div>
-          <div id="mapBox" class="map-preview hidden">
-            <img id="mapImg" src="" alt="定位地图" />
-          </div>
-          <div class="loc-hint" id="locHint">✅ 请确认以上位置是你当前的实际位置，确认无误后再提交</div>
+          <div class="loc-hint" id="locHint">✅ 位置已获取，可以直接提交；地址补全后会自动显示</div>
         </div>
         <div id="locFailed" class="hidden">
           <div class="loc-header">
@@ -177,12 +168,12 @@
             <span class="label">定位失败</span>
           </div>
           <div class="loc-address" id="locFailMsg" style="font-size:14px;color:#991b1b;">-</div>
-          <div class="loc-hint">请确保已开启 GPS 并允许浏览器获取位置，然后点击下方重试</div>
+          <div class="loc-hint">请确保已开启定位权限，然后点击下方重试</div>
           <button class="btn btn-outline" id="btnRelocate">🔄 重新定位</button>
         </div>
       </div>
 
-      <button class="btn btn-primary" id="btnSubmit" disabled>请先等待定位完成</button>
+      <button class="btn btn-primary" id="btnSubmit" disabled>正在定位…</button>
       <div class="tip" id="todayTip"></div>
     </div>
   </div>
@@ -204,8 +195,6 @@
   var locAccuracy = document.getElementById("locAccuracy");
   var locFailMsg = document.getElementById("locFailMsg");
   var locHint = document.getElementById("locHint");
-  var mapBox = document.getElementById("mapBox");
-  var mapImg = document.getElementById("mapImg");
   var todayTip = document.getElementById("todayTip");
   var btnSubmit = document.getElementById("btnSubmit");
 
@@ -250,14 +239,14 @@
       btnSubmit.textContent = "✅ 提交";
     } else if (!locReady) {
       btnSubmit.disabled = true;
-      btnSubmit.textContent = "请先等待定位完成";
+      btnSubmit.textContent = "正在定位…";
     } else {
       btnSubmit.disabled = true;
       btnSubmit.textContent = "请选择团名";
     }
   }
 
-  // ===== GPS 定位 + 反向地理编码 =====
+  // ===== 定位：两段式，先快后准，坐标到手即可提交 =====
   function requestLocation() {
     locReady = false;
     updateSubmitBtn();
@@ -267,41 +256,66 @@
     locFailed.classList.add("hidden");
 
     if (!navigator.geolocation) {
-      showLocFailed("当前浏览器不支持 GPS 定位，请换用手机浏览器");
+      showLocFailed("当前浏览器不支持定位，请换用手机浏览器或微信打开");
       return;
     }
 
+    // 第一段：网络/缓存快速定位，几秒内出结果
     navigator.geolocation.getCurrentPosition(
-      function(pos) {
-        var lat = pos.coords.latitude;
-        var lng = pos.coords.longitude;
-        var acc = Math.round(pos.coords.accuracy || 0);
-        locCache = { lat: lat.toFixed(6), lng: lng.toFixed(6), accuracy: acc, address: "" };
-
-        // 先显示经纬度
-        locLoading.classList.add("hidden");
-        locResult.classList.remove("hidden");
-        locCard.className = "loc-card located";
-        locAddress.textContent = "正在解析地址…";
-        locCoords.textContent = "纬度 " + locCache.lat + " / 经度 " + locCache.lng;
-        locAccuracy.textContent = "精度约 " + acc + " 米";
-
-        // 尝试显示静态地图
-        showStaticMap(lat, lng);
-
-        // 反向地理编码
-        reverseGeocode(locCache.lat, locCache.lng);
-      },
+      onFastPosition,
       function(err) {
-        var msg = "定位失败";
-        if (err.code === 1) msg = "你拒绝了位置权限，请到浏览器设置中允许获取位置";
-        else if (err.code === 2) msg = "GPS 信号不可用，请到室外开阔地带重试";
-        else if (err.code === 3) msg = "定位超时，请检查网络后重试";
-        else msg = "定位失败：" + err.message;
-        showLocFailed(msg);
+        // 快速定位失败，再尝试一次高精度
+        navigator.geolocation.getCurrentPosition(
+          onFastPosition,
+          function(err2) { showLocFailed(errMsg(err2)); },
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 180000 }
     );
+  }
+
+  function errMsg(err) {
+    if (err.code === 1) return "你拒绝了位置权限，请在浏览器设置中允许获取位置后重试";
+    if (err.code === 2) return "暂时收不到定位信号，请到窗边或室外重试";
+    if (err.code === 3) return "定位超时，请检查手机网络和定位开关后重试";
+    return "定位失败：" + (err.message || "未知错误");
+  }
+
+  function onFastPosition(pos) {
+    applyPosition(pos, true);
+    // 第二段：后台高精度精化，结果更好就静默更新
+    navigator.geolocation.getCurrentPosition(
+      function(finePos) {
+        if (!locCache || finePos.coords.accuracy < locCache.accuracy) {
+          applyPosition(finePos, false);
+        }
+      },
+      function() { /* 精化失败无所谓，快速结果已可用 */ },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }
+
+  function applyPosition(pos, isFirst) {
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    var acc = Math.round(pos.coords.accuracy || 0);
+    var hadAddress = locCache && locCache.address;
+    locCache = { lat: lat.toFixed(6), lng: lng.toFixed(6), accuracy: acc, address: hadAddress ? "" : (locCache ? locCache.address : "") };
+
+    locLoading.classList.add("hidden");
+    locResult.classList.remove("hidden");
+    locCard.className = "loc-card located";
+    locAccuracy.textContent = "精度约 " + acc + " 米";
+    locCoords.textContent = "纬度 " + locCache.lat + " / 经度 " + locCache.lng;
+    locAddress.textContent = locCache.address || "已获取当前位置，地址补全中…";
+
+    // 坐标到手即就绪，不等待地址解析
+    locReady = true;
+    updateSubmitBtn();
+
+    // 地址解析：后台异步、限时 6 秒，失败不影响提交
+    reverseGeocode(locCache.lat, locCache.lng);
   }
 
   function showLocFailed(msg) {
@@ -314,34 +328,28 @@
     locFailMsg.textContent = msg;
   }
 
-  function showStaticMap(lat, lng) {
-    // 使用 OpenStreetMap 静态地图（无需 key）
-    var mapUrl = "https://staticmap.openstreetmap.de/staticmap.php?center=" + lat + "," + lng + "&zoom=16&size=400x140&markers=" + lat + "," + lng + ",red-pushpin";
-    mapImg.src = mapUrl;
-    mapBox.classList.remove("hidden");
-    mapImg.onerror = function() { mapBox.classList.add("hidden"); };
-  }
-
   function reverseGeocode(lat, lng) {
-    var url = "https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&accept-language=zh&zoom=18&addressdetails=1";
-    fetch(url, { headers: { "Accept": "application/json" } })
+    var url = "https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&accept-language=zh&zoom=18";
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 6000);
+    fetch(url, { headers: { "Accept": "application/json" }, signal: ctrl.signal, cache: "no-store" })
       .then(function(resp) { return resp.json(); })
       .then(function(data) {
+        clearTimeout(timer);
         if (data && data.display_name) {
           locCache.address = data.display_name;
           locAddress.textContent = data.display_name;
+          locHint.textContent = "✅ 请确认以上位置是你当前的实际位置，确认无误后再提交";
         } else {
-          locAddress.textContent = "无法解析地址，将记录坐标";
-          locHint.textContent = "⚠️ 地址解析失败，将记录经纬度坐标";
+          locAddress.textContent = "位置已记录（经纬度 " + locCache.lat + "," + locCache.lng + "）";
         }
-        locReady = true;
-        updateSubmitBtn();
       })
       .catch(function() {
-        locAddress.textContent = "地址解析超时，将记录坐标";
-        locHint.textContent = "⚠️ 地址解析超时，将记录经纬度坐标";
-        locReady = true;
-        updateSubmitBtn();
+        clearTimeout(timer);
+        // 地址服务慢/不通：静默降级，坐标已足够记录位置
+        if (locCache && !locCache.address) {
+          locAddress.textContent = "位置已记录（经纬度 " + locCache.lat + "," + locCache.lng + "）";
+        }
       });
   }
 
@@ -392,9 +400,9 @@
 
     var locText = "";
     if (locCache.address) {
-      locText = locCache.address + " (" + locCache.lat + "," + locCache.lng + ")";
+      locText = locCache.address + "（纬度：" + locCache.lat + "，经度：" + locCache.lng + "，定位精度约：" + locCache.accuracy + "米）";
     } else {
-      locText = locCache.lat + "," + locCache.lng;
+      locText = "纬度：" + locCache.lat + "，经度：" + locCache.lng + "，定位精度约：" + locCache.accuracy + "米";
     }
 
     var sep = FORM_URL.indexOf("?") > -1 ? "&" : "?";
